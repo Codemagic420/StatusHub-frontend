@@ -1,6 +1,8 @@
 const API_BASE = "http://localhost:8080/api";
 
-let state = {
+const ENV_STATUSES = ["OK", "ISSUES", "FREEZE", "DOWN"];
+
+const state = {
     environments: [],
     currentEnvId: null,
 };
@@ -21,6 +23,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const addEnvBtn = document.getElementById("add-env-btn");
     const envCancelBtn = document.getElementById("env-cancel");
 
+    // ---------- helpers til status-visning ----------
+
     function statusClass(status) {
         switch ((status || "").toUpperCase()) {
             case "OK":
@@ -29,6 +33,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 return "pill-issues";
             case "FREEZE":
                 return "pill-freeze";
+            case "DOWN":
+                return "pill-down";
             default:
                 return "pill-muted";
         }
@@ -42,10 +48,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 return "status-issues";
             case "FREEZE":
                 return "status-freeze";
+            case "DOWN":
+                return "status-down";
             default:
                 return "";
         }
     }
+
+    // ---------- render environments ----------
 
     function renderEnvironments() {
         envListEl.innerHTML = "";
@@ -95,6 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
         currentEnvStatusEl.className = `pill ${statusClass(env.status)}`;
     }
 
+    // ---------- posts-rendering (med delete-knap) ----------
+
     function renderPosts(posts) {
         postsListEl.innerHTML = "";
 
@@ -110,6 +122,12 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // nyeste først (hvis createdAt findes)
+        posts.sort((a, b) => {
+            if (!a.createdAt || !b.createdAt) return 0;
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+
         posts.forEach((p) => {
             const card = document.createElement("article");
             card.className = "post-card";
@@ -120,7 +138,12 @@ document.addEventListener("DOMContentLoaded", () => {
             card.innerHTML = `
                 <div class="post-header">
                     <div class="post-title">${p.title}</div>
-                    <span class="pill pill-small pill-muted">${p.type}</span>
+                    <div class="post-actions">
+                        <span class="pill pill-small pill-muted">${p.type}</span>
+                        <button class="btn btn-ghost btn-small post-delete" title="Delete post">
+                            ✕
+                        </button>
+                    </div>
                 </div>
                 <div class="post-meta">
                     <span>${created}</span>
@@ -131,9 +154,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             `;
 
+            const deleteBtn = card.querySelector(".post-delete");
+            deleteBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (!confirm("Delete this post?")) return;
+
+                try {
+                    await deletePost(p.id);
+                    await loadPostsForEnvironment(state.currentEnvId);
+                } catch (err) {
+                    console.error(err);
+                    alert("Could not delete post.");
+                }
+            });
+
             postsListEl.appendChild(card);
         });
     }
+
+    // ---------- API-kald ----------
 
     async function loadEnvironments() {
         try {
@@ -189,6 +228,17 @@ document.addEventListener("DOMContentLoaded", () => {
         return res.json();
     }
 
+    async function deletePost(id) {
+        const res = await fetch(`${API_BASE}/posts/${id}`, {
+            method: "DELETE",
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to delete post");
+        }
+    }
+
     async function createEnvironment(payload) {
         const res = await fetch(`${API_BASE}/environments`, {
             method: "POST",
@@ -201,6 +251,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         return res.json();
     }
+
+    async function updateEnvironment(id, payload) {
+        const res = await fetch(`${API_BASE}/environments/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to update environment");
+        }
+        return res.json();
+    }
+
+    // ---------- UI-handlers ----------
 
     togglePostFormBtn.addEventListener("click", () => {
         if (!state.currentEnvId) return;
@@ -267,5 +332,35 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Klik på status-pill -> cyklér status & opdater backend
+    currentEnvStatusEl.addEventListener("click", async () => {
+        if (!state.currentEnvId) return;
+
+        const env = state.environments.find(
+            (e) => e.id === state.currentEnvId
+        );
+        if (!env) return;
+
+        const current = (env.status || "OK").toUpperCase();
+        const idx = ENV_STATUSES.indexOf(current);
+        const nextStatus =
+            ENV_STATUSES[(idx + 1 + ENV_STATUSES.length) % ENV_STATUSES.length];
+
+        try {
+            const updated = await updateEnvironment(env.id, {
+                name: env.name,
+                status: nextStatus,
+            });
+
+            env.status = updated.status;
+            updateCurrentEnvironmentHeader(env);
+            renderEnvironments();
+        } catch (err) {
+            console.error(err);
+            alert("Could not update environment status.");
+        }
+    });
+
+    // initial load
     loadEnvironments();
 });

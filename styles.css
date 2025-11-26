@@ -107,8 +107,10 @@ body {
     align-items: center;
     cursor: pointer;
     border: 1px solid transparent;
-    transition: background var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fast);
+    transition:
+            background var(--transition-fast),
+            border-color var(--transition-fast),
+            transform var(--transition-fast);
     font-size: 0.9rem;
 }
 
@@ -155,6 +157,11 @@ body {
 }
 
 .status-freeze {
+    background: var(--danger);
+}
+
+/* NY: DOWN status-dot */
+.status-down {
     background: var(--danger);
 }
 
@@ -248,6 +255,18 @@ body {
     color: var(--text);
 }
 
+/* NY: actions på post-kort (type + delete-knap) */
+
+.post-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.post-delete {
+    padding-inline: 0.45rem;
+}
+
 /* Pills, buttons, forms */
 
 .pill {
@@ -288,6 +307,20 @@ body {
     color: #fecaca;
 }
 
+/* NY: DOWN pill */
+
+.pill-down {
+    background: rgba(248, 113, 113, 0.25);
+    border-color: rgba(248, 113, 113, 0.8);
+    color: #fee2e2;
+}
+
+/* gør status-pill klikbar */
+
+#current-env-status {
+    cursor: pointer;
+}
+
 .btn {
     border-radius: 999px;
     border: 1px solid transparent;
@@ -301,8 +334,11 @@ body {
     font-weight: 500;
     background: transparent;
     color: var(--text);
-    transition: background var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+            background var(--transition-fast),
+            border-color var(--transition-fast),
+            transform var(--transition-fast),
+            box-shadow var(--transition-fast);
 }
 
 .btn-small {
