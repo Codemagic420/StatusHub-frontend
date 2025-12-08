@@ -33,6 +33,90 @@ body {
     font-family: var(--font-main);
 }
 
+/* LOGIN SCREEN */
+
+.login-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top, #1f2937 0, #020617 40%, #000 100%);
+    z-index: 50;
+}
+
+.login-card {
+    background: var(--bg-elevated-soft);
+    border-radius: 18px;
+    padding: 2rem 2.25rem;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-card h1 {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.login-subtitle {
+    margin: 0.4rem 0 1.2rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-bottom: 0.6rem;
+}
+
+.login-error {
+    font-size: 0.8rem;
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    padding: 0.4rem 0.5rem;
+    border-radius: 10px;
+}
+
+.change-password-success {
+    font-size: 0.8rem;
+    color: #bbf7d0;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    padding: 0.4rem 0.5rem;
+    border-radius: 10px;
+}
+
+.login-links {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+    margin-top: 0.3rem;
+}
+
+.secondary-card {
+    margin-top: 0.4rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+}
+
+.secondary-card h2 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+/* App wrapper (skjult før login) */
+
+.app-screen {
+    min-height: 100vh;
+}
+
 /* Topbar */
 
 .topbar {
@@ -58,6 +142,7 @@ body {
 .topbar-right {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
 }
 
 /* Layout */
