@@ -1,5 +1,6 @@
 const API_BASE = "http://localhost:8080/api";
 
+// rækkefølgen vi cykler igennem ved klik på status-pill
 const ENV_STATUSES = ["OK", "ISSUES", "FREEZE", "DOWN"];
 
 const state = {
@@ -23,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const addEnvBtn = document.getElementById("add-env-btn");
     const envCancelBtn = document.getElementById("env-cancel");
 
-    // ---------- helpers til status-visning ----------
+    /* ---------- helpers til status ---------- */
 
     function statusClass(status) {
         switch ((status || "").toUpperCase()) {
@@ -55,124 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // ---------- render environments ----------
-
-    function renderEnvironments() {
-        envListEl.innerHTML = "";
-
-        if (state.environments.length === 0) {
-            envListEl.innerHTML =
-                '<li class="empty-state">No environments yet. Create one to get started.</li>';
-            return;
-        }
-
-        state.environments.forEach((env) => {
-            const li = document.createElement("li");
-            li.className =
-                "env-item" + (env.id === state.currentEnvId ? " active" : "");
-            li.dataset.id = env.id;
-
-            li.innerHTML = `
-                <div class="env-name">${env.name}</div>
-                <div class="env-status-wrapper">
-                    <span class="env-status-dot ${dotClass(env.status)}"></span>
-                    <span>${env.status}</span>
-                </div>
-            `;
-
-            li.addEventListener("click", () => {
-                state.currentEnvId = env.id;
-                renderEnvironments();
-                updateCurrentEnvironmentHeader(env);
-                loadPostsForEnvironment(env.id);
-                postFormCard.classList.add("hidden");
-            });
-
-            envListEl.appendChild(li);
-        });
-    }
-
-    function updateCurrentEnvironmentHeader(env) {
-        if (!env) {
-            currentEnvNameEl.textContent = "Select an environment";
-            currentEnvStatusEl.textContent = "No environment";
-            currentEnvStatusEl.className = "pill pill-muted";
-            return;
-        }
-
-        currentEnvNameEl.textContent = env.name;
-        currentEnvStatusEl.textContent = env.status;
-        currentEnvStatusEl.className = `pill ${statusClass(env.status)}`;
-    }
-
-    // ---------- posts-rendering (med delete-knap) ----------
-
-    function renderPosts(posts) {
-        postsListEl.innerHTML = "";
-
-        if (!state.currentEnvId) {
-            postsListEl.innerHTML =
-                '<div class="empty-state"><p>Select an environment to see posts.</p></div>';
-            return;
-        }
-
-        if (!posts || posts.length === 0) {
-            postsListEl.innerHTML =
-                '<div class="empty-state"><p>No posts for this environment yet.</p></div>';
-            return;
-        }
-
-        // nyeste først (hvis createdAt findes)
-        posts.sort((a, b) => {
-            if (!a.createdAt || !b.createdAt) return 0;
-            return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-
-        posts.forEach((p) => {
-            const card = document.createElement("article");
-            card.className = "post-card";
-
-            const created =
-                p.createdAt != null ? new Date(p.createdAt).toLocaleString() : "";
-
-            card.innerHTML = `
-                <div class="post-header">
-                    <div class="post-title">${p.title}</div>
-                    <div class="post-actions">
-                        <span class="pill pill-small pill-muted">${p.type}</span>
-                        <button class="btn btn-ghost btn-small post-delete" title="Delete post">
-                            ✕
-                        </button>
-                    </div>
-                </div>
-                <div class="post-meta">
-                    <span>${created}</span>
-                    <span>Environment: ${p.environment?.name ?? "-"}</span>
-                </div>
-                <div class="post-body">
-                    ${p.description}
-                </div>
-            `;
-
-            const deleteBtn = card.querySelector(".post-delete");
-            deleteBtn.addEventListener("click", async (e) => {
-                e.stopPropagation();
-                if (!confirm("Delete this post?")) return;
-
-                try {
-                    await deletePost(p.id);
-                    await loadPostsForEnvironment(state.currentEnvId);
-                } catch (err) {
-                    console.error(err);
-                    alert("Could not delete post.");
-                }
-            });
-
-            postsListEl.appendChild(card);
-        });
-    }
-
-    // ---------- API-kald ----------
+    /* ---------- API helpers ---------- */
 
     async function loadEnvironments() {
         try {
@@ -187,6 +71,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateCurrentEnvironmentHeader(first);
                 renderEnvironments();
                 loadPostsForEnvironment(first.id);
+            }
+
+            // hvis vi har et valgt env, men det er blevet slettet, reset
+            if (
+                state.currentEnvId &&
+                !state.environments.some((e) => e.id === state.currentEnvId)
+            ) {
+                state.currentEnvId = null;
+                updateCurrentEnvironmentHeader(null);
+                renderPosts([]);
             }
         } catch (err) {
             console.error("Failed to load environments", err);
@@ -265,7 +159,182 @@ document.addEventListener("DOMContentLoaded", () => {
         return res.json();
     }
 
-    // ---------- UI-handlers ----------
+    async function deleteEnvironment(id) {
+        const res = await fetch(`${API_BASE}/environments/${id}`, {
+            method: "DELETE",
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to delete environment");
+        }
+    }
+
+    /* ---------- render helpers ---------- */
+
+    function updateCurrentEnvironmentHeader(env) {
+        if (!env) {
+            currentEnvNameEl.textContent = "Select an environment";
+            currentEnvStatusEl.textContent = "No environment";
+            currentEnvStatusEl.className = "pill pill-muted";
+            return;
+        }
+
+        currentEnvNameEl.textContent = env.name;
+        currentEnvStatusEl.textContent = env.status;
+        currentEnvStatusEl.className = `pill ${statusClass(env.status)}`;
+    }
+
+    function renderEnvironments() {
+        envListEl.innerHTML = "";
+
+        if (state.environments.length === 0) {
+            envListEl.innerHTML =
+                '<li class="empty-state">No environments yet. Create one to get started.</li>';
+            return;
+        }
+
+        // group by solutionName (UNASSIGNED for null/blank)
+        const groups = new Map();
+        for (const env of state.environments) {
+            const key =
+                env.solutionName && env.solutionName.trim().length > 0
+                    ? env.solutionName.trim()
+                    : "UNASSIGNED";
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(env);
+        }
+
+        // sort solution names alfabetisk, UNASSIGNED sidst
+        const solutionNames = Array.from(groups.keys()).sort((a, b) => {
+            if (a === "UNASSIGNED") return 1;
+            if (b === "UNASSIGNED") return -1;
+            return a.localeCompare(b);
+        });
+
+        solutionNames.forEach((solutionName) => {
+            const header = document.createElement("li");
+            header.className = "solution-header";
+            header.textContent = solutionName;
+            envListEl.appendChild(header);
+
+            const envs = groups.get(solutionName);
+            envs.forEach((env) => {
+                const li = document.createElement("li");
+                li.className =
+                    "env-item" + (env.id === state.currentEnvId ? " active" : "");
+                li.dataset.id = env.id;
+
+                li.innerHTML = `
+                    <div class="env-main">
+                        <div class="env-name">${env.name}</div>
+                        <div class="env-status-wrapper">
+                            <span class="env-status-dot ${dotClass(env.status)}"></span>
+                            <span>${env.status}</span>
+                        </div>
+                    </div>
+                    <button class="env-delete" title="Delete environment">✕</button>
+                `;
+
+                // klik på selve item -> vælg environment
+                li.addEventListener("click", () => {
+                    state.currentEnvId = env.id;
+                    renderEnvironments();
+                    updateCurrentEnvironmentHeader(env);
+                    loadPostsForEnvironment(env.id);
+                    postFormCard.classList.add("hidden");
+                });
+
+                // klik på delete-knap
+                const deleteBtn = li.querySelector(".env-delete");
+                deleteBtn.addEventListener("click", async (e) => {
+                    e.stopPropagation(); // undgå at vælge env samtidig
+
+                    if (
+                        !confirm(
+                            `Delete environment "${env.name}"?\nAll posts for this environment will also be deleted.`
+                        )
+                    )
+                        return;
+
+                    try {
+                        await deleteEnvironment(env.id);
+                        if (state.currentEnvId === env.id) {
+                            state.currentEnvId = null;
+                            updateCurrentEnvironmentHeader(null);
+                            renderPosts([]);
+                        }
+                        await loadEnvironments();
+                    } catch (err) {
+                        console.error(err);
+                        alert("Could not delete environment.");
+                    }
+                });
+
+                envListEl.appendChild(li);
+            });
+        });
+    }
+
+    function renderPosts(posts) {
+        postsListEl.innerHTML = "";
+
+        if (!state.currentEnvId) {
+            postsListEl.innerHTML =
+                '<div class="empty-state"><p>Select an environment to see posts.</p></div>';
+            return;
+        }
+
+        if (!posts || posts.length === 0) {
+            postsListEl.innerHTML =
+                '<div class="empty-state"><p>No posts for this environment yet.</p></div>';
+            return;
+        }
+
+        posts.forEach((p) => {
+            const card = document.createElement("article");
+            card.className = "post-card";
+
+            const created =
+                p.createdAt != null ? new Date(p.createdAt).toLocaleString() : "";
+
+            card.innerHTML = `
+                <div class="post-header">
+                    <div class="post-title">${p.title}</div>
+                    <div class="post-actions">
+                        <span class="pill pill-small pill-muted">${p.type}</span>
+                        <button class="btn btn-ghost btn-small post-delete" title="Delete post">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+                <div class="post-meta">
+                    <span>${created}</span>
+                    <span>Environment: ${p.environment?.name ?? "-"}</span>
+                </div>
+                <div class="post-body">
+                    ${p.description}
+                </div>
+            `;
+
+            const deleteBtn = card.querySelector(".post-delete");
+            deleteBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (!confirm("Delete this post?")) return;
+
+                try {
+                    await deletePost(p.id);
+                    await loadPostsForEnvironment(state.currentEnvId);
+                } catch (err) {
+                    console.error(err);
+                    alert("Could not delete post.");
+                }
+            });
+
+            postsListEl.appendChild(card);
+        });
+    }
+
+    /* ---------- UI events ---------- */
 
     togglePostFormBtn.addEventListener("click", () => {
         if (!state.currentEnvId) return;
@@ -315,6 +384,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const payload = {
             name: formData.get("name"),
             status: formData.get("status"),
+            solutionName: formData.get("solutionName") || null,
         };
 
         try {
@@ -332,7 +402,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Klik på status-pill -> cyklér status & opdater backend
+    // Klik på status-pill i header -> skift status
     currentEnvStatusEl.addEventListener("click", async () => {
         if (!state.currentEnvId) return;
 
@@ -350,8 +420,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const updated = await updateEnvironment(env.id, {
                 name: env.name,
                 status: nextStatus,
+                solutionName: env.solutionName,
             });
 
+            // opdatér lokal state
             env.status = updated.status;
             updateCurrentEnvironmentHeader(env);
             renderEnvironments();
@@ -361,6 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // initial load
+    /* ---------- initial load ---------- */
+
     loadEnvironments();
 });
