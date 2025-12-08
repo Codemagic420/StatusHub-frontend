@@ -99,6 +99,20 @@ body {
     overflow-y: auto;
 }
 
+/* Solution headers */
+
+.solution-header {
+    margin-top: 0.4rem;
+    margin-bottom: 0.1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 0.25rem 0.3rem;
+}
+
+/* Environment items */
+
 .env-item {
     padding: 0.45rem 0.6rem;
     border-radius: var(--radius-md);
@@ -107,10 +121,8 @@ body {
     align-items: center;
     cursor: pointer;
     border: 1px solid transparent;
-    transition:
-            background var(--transition-fast),
-            border-color var(--transition-fast),
-            transform var(--transition-fast);
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
     font-size: 0.9rem;
 }
 
@@ -123,6 +135,14 @@ body {
 .env-item.active {
     background: var(--accent-soft);
     border-color: var(--accent);
+}
+
+.env-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex: 1;
 }
 
 .env-name {
@@ -146,6 +166,21 @@ body {
     color: var(--text-muted);
 }
 
+.env-delete {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+}
+
+.env-delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fecaca;
+}
+
 /* Status colors */
 
 .status-ok {
@@ -160,7 +195,6 @@ body {
     background: var(--danger);
 }
 
-/* NY: DOWN status-dot */
 .status-down {
     background: var(--danger);
 }
@@ -255,7 +289,7 @@ body {
     color: var(--text);
 }
 
-/* NY: actions på post-kort (type + delete-knap) */
+/* post actions (type + delete knap) */
 
 .post-actions {
     display: flex;
@@ -307,18 +341,10 @@ body {
     color: #fecaca;
 }
 
-/* NY: DOWN pill */
-
 .pill-down {
-    background: rgba(248, 113, 113, 0.25);
-    border-color: rgba(248, 113, 113, 0.8);
-    color: #fee2e2;
-}
-
-/* gør status-pill klikbar */
-
-#current-env-status {
-    cursor: pointer;
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #fecaca;
 }
 
 .btn {
@@ -334,11 +360,8 @@ body {
     font-weight: 500;
     background: transparent;
     color: var(--text);
-    transition:
-            background var(--transition-fast),
-            border-color var(--transition-fast),
-            transform var(--transition-fast),
-            box-shadow var(--transition-fast);
+    transition: background var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .btn-small {
