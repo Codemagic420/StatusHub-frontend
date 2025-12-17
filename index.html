@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>StatusHub Dashboard</title>
     <link rel="stylesheet" href="styles.css" />
 </head>
@@ -11,7 +12,7 @@
 <div id="login-screen" class="login-screen">
     <div class="login-card">
         <h1>StatusHub</h1>
-        <p class="login-subtitle">Sign in to view environments and deployments.</p>
+        <p class="login-subtitle">Sign in to view environments, posts and comments.</p>
 
         <!-- LOGIN FORM -->
         <form id="login-form" class="login-form">
@@ -23,21 +24,15 @@
                 Password
                 <input type="password" name="password" required />
             </label>
-            <div id="login-error" class="login-error hidden">
-                Invalid username or password.
-            </div>
+            <div id="login-error" class="login-error hidden">Invalid username or password.</div>
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary btn-small">Sign in</button>
             </div>
         </form>
 
         <div class="login-links">
-            <button id="show-register" type="button" class="btn btn-ghost btn-small">
-                Create user
-            </button>
-            <button id="show-change-password" type="button" class="btn btn-ghost btn-small">
-                Change password
-            </button>
+            <button id="show-register" type="button" class="btn btn-ghost btn-small">Create user</button>
+            <button id="show-change-password" type="button" class="btn btn-ghost btn-small">Change password</button>
         </div>
 
         <!-- CREATE USER -->
@@ -59,12 +54,8 @@
                         <option value="ADMIN">Admin</option>
                     </select>
                 </label>
-                <div id="register-error" class="login-error hidden">
-                    Could not create user.
-                </div>
-                <div id="register-success" class="change-password-success hidden">
-                    User created successfully.
-                </div>
+                <div id="register-error" class="login-error hidden">Could not create user.</div>
+                <div id="register-success" class="success-box hidden">User created successfully.</div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary btn-small">Create</button>
                 </div>
@@ -87,12 +78,8 @@
                     New password
                     <input type="password" name="newPassword" required minlength="4" />
                 </label>
-                <div id="change-password-error" class="login-error hidden">
-                    Could not change password.
-                </div>
-                <div id="change-password-success" class="change-password-success hidden">
-                    Password updated successfully.
-                </div>
+                <div id="change-password-error" class="login-error hidden">Could not change password.</div>
+                <div id="change-password-success" class="success-box hidden">Password updated successfully.</div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary btn-small">Update</button>
                 </div>
@@ -101,12 +88,13 @@
     </div>
 </div>
 
-<!-- APP (skjult indtil login) -->
+<!-- APP SCREEN -->
 <div id="app-screen" class="app-screen hidden">
     <header class="topbar">
         <div class="logo">StatusHub</div>
         <div class="topbar-right">
             <span id="user-badge" class="pill pill-small hidden"></span>
+            <span id="role-badge" class="pill pill-small pill-muted hidden"></span>
             <button id="logout-btn" class="btn btn-ghost btn-small hidden">Logout</button>
             <span class="pill pill-small">Prototype</span>
         </div>
@@ -117,14 +105,14 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2>Environments</h2>
-                <button id="add-env-btn" class="btn btn-ghost btn-small">+ New</button>
+                <button id="add-env-btn" class="btn btn-ghost btn-small admin-only">+ New</button>
             </div>
 
             <ul id="env-list" class="env-list">
                 <!-- Environments renderes her -->
             </ul>
 
-            <div id="env-form" class="card card-small hidden">
+            <div id="env-form" class="card card-small hidden admin-only">
                 <h3>Create environment</h3>
                 <form id="env-create-form">
                     <label>
@@ -152,13 +140,15 @@
             </div>
         </aside>
 
-        <!-- MAIN CONTENT: POSTS -->
+        <!-- MAIN CONTENT -->
         <section class="content">
             <div class="content-header">
                 <div>
                     <h1 id="current-env-name">Select an environment</h1>
                     <p class="subtitle">Overview of deployments, incidents and status updates.</p>
                 </div>
+
+                <!-- status pill: only ADMIN can click-change -->
                 <span id="current-env-status" class="pill pill-muted">No environment</span>
             </div>
 
