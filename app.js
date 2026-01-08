@@ -1,6 +1,4 @@
 const API_BASE = "http://localhost:8080/api";
-
-// rækkefølgen vi cykler igennem ved klik på status-pill
 const ENV_STATUSES = ["OK", "ISSUES", "FREEZE", "DOWN"];
 
 const state = {
@@ -8,7 +6,38 @@ const state = {
     currentEnvId: null,
 };
 
+const authState = {
+    isLoggedIn: false,
+    username: null,
+    role: null,
+    token: null,
+};
+
 document.addEventListener("DOMContentLoaded", () => {
+    /* ---------- login / logout ---------- */
+
+    const loginScreen = document.getElementById("login-screen");
+    const appScreen = document.getElementById("app-screen");
+    const loginForm = document.getElementById("login-form");
+    const loginErrorEl = document.getElementById("login-error");
+    const logoutBtn = document.getElementById("logout-btn");
+    const userBadgeEl = document.getElementById("user-badge");
+    const roleBadgeEl = document.getElementById("role-badge");
+
+    const showRegisterBtn = document.getElementById("show-register");
+    const registerCard = document.getElementById("register-card");
+    const registerForm = document.getElementById("register-form");
+    const registerErrorEl = document.getElementById("register-error");
+    const registerSuccessEl = document.getElementById("register-success");
+
+    const showChangePwBtn = document.getElementById("show-change-password");
+    const changePwCard = document.getElementById("change-password-card");
+    const changePwForm = document.getElementById("change-password-form");
+    const changePwErrorEl = document.getElementById("change-password-error");
+    const changePwSuccessEl = document.getElementById("change-password-success");
+
+    /* ---------- app elements ---------- */
+
     const envListEl = document.getElementById("env-list");
     const currentEnvNameEl = document.getElementById("current-env-name");
     const currentEnvStatusEl = document.getElementById("current-env-status");
@@ -24,7 +53,35 @@ document.addEventListener("DOMContentLoaded", () => {
     const addEnvBtn = document.getElementById("add-env-btn");
     const envCancelBtn = document.getElementById("env-cancel");
 
-    /* ---------- helpers til status ---------- */
+    /* ---------- role helpers ---------- */
+
+    function isAdmin() {
+        return (authState.role || "").toUpperCase() === "ADMIN";
+    }
+
+    function applyRoleVisibility() {
+        const adminEls = document.querySelectorAll(".admin-only");
+
+        adminEls.forEach((el) => {
+            if (isAdmin()) el.classList.remove("hidden");
+            else el.classList.add("hidden");
+        });
+
+        // status pill: only clickable for admin
+        currentEnvStatusEl.style.cursor = isAdmin() ? "pointer" : "default";
+        currentEnvStatusEl.title = isAdmin()
+            ? "Click to cycle status"
+            : "Only ADMIN can change status";
+    }
+
+    function authHeaders() {
+        return {
+            "X-Role": authState.role || "VIEWER",
+            "X-User": authState.username || "anonymous",
+        };
+    }
+
+    /* ---------- status helpers ---------- */
 
     function statusClass(status) {
         switch ((status || "").toUpperCase()) {
@@ -56,7 +113,48 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    /* ---------- API helpers ---------- */
+    /* ---------- API: auth ---------- */
+
+    async function apiLogin(username, password) {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+        });
+
+        if (!res.ok) throw new Error("Invalid credentials");
+        return res.json();
+    }
+
+    async function apiChangePassword(username, oldPassword, newPassword) {
+        const res = await fetch(`${API_BASE}/auth/change-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, oldPassword, newPassword }),
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to change password");
+        }
+        return res.text();
+    }
+
+    async function apiRegisterUser(username, password, role) {
+        const res = await fetch(`${API_BASE}/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password, role }),
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to create user");
+        }
+        return res.text();
+    }
+
+    /* ---------- API: environments ---------- */
 
     async function loadEnvironments() {
         try {
@@ -73,7 +171,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadPostsForEnvironment(first.id);
             }
 
-            // hvis vi har et valgt env, men det er blevet slettet, reset
             if (
                 state.currentEnvId &&
                 !state.environments.some((e) => e.id === state.currentEnvId)
@@ -84,10 +181,54 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } catch (err) {
             console.error("Failed to load environments", err);
-            envListEl.innerHTML =
-                '<li class="empty-state">Failed to load environments.</li>';
+            envListEl.innerHTML = '<li class="empty-state">Failed to load environments.</li>';
         }
     }
+
+    async function createEnvironment(payload) {
+        const res = await fetch(`${API_BASE}/environments`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...authHeaders(),
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to create environment");
+        }
+        return res.json();
+    }
+
+    async function updateEnvironment(id, payload) {
+        const res = await fetch(`${API_BASE}/environments/${id}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                ...authHeaders(),
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to update environment");
+        }
+        return res.json();
+    }
+
+    async function deleteEnvironment(id) {
+        const res = await fetch(`${API_BASE}/environments/${id}`, {
+            method: "DELETE",
+            headers: { ...authHeaders() },
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to delete environment");
+        }
+    }
+
+    /* ---------- API: posts ---------- */
 
     async function loadPostsForEnvironment(envId) {
         if (!envId) {
@@ -96,22 +237,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
-            const res = await fetch(
-                `${API_BASE}/posts/environment/${encodeURIComponent(envId)}`
-            );
+            const res = await fetch(`${API_BASE}/posts/environment/${encodeURIComponent(envId)}`);
             const data = await res.json();
             renderPosts(data);
         } catch (err) {
             console.error("Failed to load posts", err);
-            postsListEl.innerHTML =
-                '<div class="empty-state">Failed to load posts.</div>';
+            postsListEl.innerHTML = '<div class="empty-state">Failed to load posts.</div>';
         }
     }
 
     async function createPost(payload) {
         const res = await fetch(`${API_BASE}/posts`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                ...authHeaders(),
+            },
             body: JSON.stringify(payload),
         });
 
@@ -125,6 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function deletePost(id) {
         const res = await fetch(`${API_BASE}/posts/${id}`, {
             method: "DELETE",
+            headers: { ...authHeaders() },
         });
 
         if (!res.ok) {
@@ -133,43 +275,47 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function createEnvironment(payload) {
-        const res = await fetch(`${API_BASE}/environments`, {
+    /* ---------- API: comments ---------- */
+
+    async function loadComments(postId) {
+        const res = await fetch(`${API_BASE}/posts/${postId}/comments`);
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || "Failed to load comments");
+        }
+        return res.json();
+    }
+
+    async function addComment(postId, payload) {
+        const res = await fetch(`${API_BASE}/posts/${postId}/comments`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                ...authHeaders(), // ikke krævet for create, men ok
+            },
             body: JSON.stringify(payload),
         });
+
         if (!res.ok) {
             const text = await res.text();
-            throw new Error(text || "Failed to create environment");
+            throw new Error(text || "Failed to add comment");
         }
         return res.json();
     }
 
-    async function updateEnvironment(id, payload) {
-        const res = await fetch(`${API_BASE}/environments/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const text = await res.text();
-            throw new Error(text || "Failed to update environment");
-        }
-        return res.json();
-    }
-
-    async function deleteEnvironment(id) {
-        const res = await fetch(`${API_BASE}/environments/${id}`, {
+    async function deleteComment(commentId) {
+        const res = await fetch(`${API_BASE}/comments/${commentId}`, {
             method: "DELETE",
+            headers: { ...authHeaders() },
         });
+
         if (!res.ok) {
             const text = await res.text();
-            throw new Error(text || "Failed to delete environment");
+            throw new Error(text || "Failed to delete comment");
         }
     }
 
-    /* ---------- render helpers ---------- */
+    /* ---------- render ---------- */
 
     function updateCurrentEnvironmentHeader(env) {
         if (!env) {
@@ -179,7 +325,9 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        currentEnvNameEl.textContent = env.name;
+        const label = env.solutionName ? `${env.solutionName} • ${env.name}` : env.name;
+        currentEnvNameEl.textContent = label;
+
         currentEnvStatusEl.textContent = env.status;
         currentEnvStatusEl.className = `pill ${statusClass(env.status)}`;
     }
@@ -193,7 +341,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // group by solutionName (UNASSIGNED for null/blank)
         const groups = new Map();
         for (const env of state.environments) {
             const key =
@@ -204,7 +351,6 @@ document.addEventListener("DOMContentLoaded", () => {
             groups.get(key).push(env);
         }
 
-        // sort solution names alfabetisk, UNASSIGNED sidst
         const solutionNames = Array.from(groups.keys()).sort((a, b) => {
             if (a === "UNASSIGNED") return 1;
             if (b === "UNASSIGNED") return -1;
@@ -218,11 +364,15 @@ document.addEventListener("DOMContentLoaded", () => {
             envListEl.appendChild(header);
 
             const envs = groups.get(solutionName);
+
             envs.forEach((env) => {
                 const li = document.createElement("li");
-                li.className =
-                    "env-item" + (env.id === state.currentEnvId ? " active" : "");
+                li.className = "env-item" + (env.id === state.currentEnvId ? " active" : "");
                 li.dataset.id = env.id;
+
+                const deleteButtonHtml = isAdmin()
+                    ? `<button class="env-delete" title="Delete environment">✕</button>`
+                    : "";
 
                 li.innerHTML = `
                     <div class="env-main">
@@ -232,10 +382,9 @@ document.addEventListener("DOMContentLoaded", () => {
                             <span>${env.status}</span>
                         </div>
                     </div>
-                    <button class="env-delete" title="Delete environment">✕</button>
+                    ${deleteButtonHtml}
                 `;
 
-                // klik på selve item -> vælg environment
                 li.addEventListener("click", () => {
                     state.currentEnvId = env.id;
                     renderEnvironments();
@@ -244,31 +393,27 @@ document.addEventListener("DOMContentLoaded", () => {
                     postFormCard.classList.add("hidden");
                 });
 
-                // klik på delete-knap
-                const deleteBtn = li.querySelector(".env-delete");
-                deleteBtn.addEventListener("click", async (e) => {
-                    e.stopPropagation(); // undgå at vælge env samtidig
+                if (isAdmin()) {
+                    const deleteBtn = li.querySelector(".env-delete");
+                    deleteBtn.addEventListener("click", async (e) => {
+                        e.stopPropagation();
 
-                    if (
-                        !confirm(
-                            `Delete environment "${env.name}"?\nAll posts for this environment will also be deleted.`
-                        )
-                    )
-                        return;
+                        if (!confirm(`Delete environment "${env.name}"?\nAll posts/comments will be deleted too.`)) return;
 
-                    try {
-                        await deleteEnvironment(env.id);
-                        if (state.currentEnvId === env.id) {
-                            state.currentEnvId = null;
-                            updateCurrentEnvironmentHeader(null);
-                            renderPosts([]);
+                        try {
+                            await deleteEnvironment(env.id);
+                            if (state.currentEnvId === env.id) {
+                                state.currentEnvId = null;
+                                updateCurrentEnvironmentHeader(null);
+                                renderPosts([]);
+                            }
+                            await loadEnvironments();
+                        } catch (err) {
+                            console.error(err);
+                            alert("Could not delete environment.");
                         }
-                        await loadEnvironments();
-                    } catch (err) {
-                        console.error(err);
-                        alert("Could not delete environment.");
-                    }
-                });
+                    });
+                }
 
                 envListEl.appendChild(li);
             });
@@ -294,39 +439,113 @@ document.addEventListener("DOMContentLoaded", () => {
             const card = document.createElement("article");
             card.className = "post-card";
 
-            const created =
-                p.createdAt != null ? new Date(p.createdAt).toLocaleString() : "";
+            const created = p.createdAt ? new Date(p.createdAt).toLocaleString() : "";
+            const responsible = p.createdBy ? p.createdBy : "unknown";
+
+            const deleteBtnHtml = isAdmin()
+                ? `<button class="btn btn-ghost btn-small post-delete" title="Delete post">✕</button>`
+                : "";
 
             card.innerHTML = `
                 <div class="post-header">
                     <div class="post-title">${p.title}</div>
                     <div class="post-actions">
                         <span class="pill pill-small pill-muted">${p.type}</span>
-                        <button class="btn btn-ghost btn-small post-delete" title="Delete post">
-                            ✕
-                        </button>
+                        ${deleteBtnHtml}
                     </div>
                 </div>
+
                 <div class="post-meta">
                     <span>${created}</span>
+                    <span>Responsible: ${responsible}</span>
                     <span>Environment: ${p.environment?.name ?? "-"}</span>
                 </div>
-                <div class="post-body">
-                    ${p.description}
+
+                <div class="post-body">${p.description}</div>
+
+                <div class="comments-wrap">
+                    <div class="comments-header">
+                        <div class="comments-title">Comments</div>
+                        <button class="btn btn-ghost btn-small comments-toggle">Show</button>
+                    </div>
+
+                    <div class="comments-body hidden">
+                        <div class="comment-list"></div>
+
+                        <form class="comment-form">
+                            <input class="comment-input" type="text" name="text" placeholder="Write a comment..." required />
+                            <button type="submit" class="btn btn-primary btn-small">Send</button>
+                        </form>
+                    </div>
                 </div>
             `;
 
-            const deleteBtn = card.querySelector(".post-delete");
-            deleteBtn.addEventListener("click", async (e) => {
-                e.stopPropagation();
-                if (!confirm("Delete this post?")) return;
+            // delete post (ADMIN only)
+            if (isAdmin()) {
+                const del = card.querySelector(".post-delete");
+                del.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    if (!confirm("Delete this post?")) return;
+
+                    try {
+                        await deletePost(p.id);
+                        await loadPostsForEnvironment(state.currentEnvId);
+                    } catch (err) {
+                        console.error(err);
+                        alert("Could not delete post.");
+                    }
+                });
+            }
+
+            // comments: toggle + load + add + (admin delete)
+            const toggleBtn = card.querySelector(".comments-toggle");
+            const bodyEl = card.querySelector(".comments-body");
+            const listEl = card.querySelector(".comment-list");
+            const formEl = card.querySelector(".comment-form");
+
+            let isOpen = false;
+            let loadedOnce = false;
+
+            toggleBtn.addEventListener("click", async () => {
+                isOpen = !isOpen;
+                toggleBtn.textContent = isOpen ? "Hide" : "Show";
+                bodyEl.classList.toggle("hidden", !isOpen);
+
+                if (isOpen && !loadedOnce) {
+                    try {
+                        const comments = await loadComments(p.id);
+                        renderComments(listEl, comments);
+                        loadedOnce = true;
+                    } catch (err) {
+                        console.error(err);
+                        listEl.innerHTML = `<div class="empty-state">Could not load comments.</div>`;
+                    }
+                }
+            });
+
+            formEl.addEventListener("submit", async (e) => {
+                e.preventDefault();
+
+                const fd = new FormData(formEl);
+                const text = fd.get("text");
+
+                if (!text || String(text).trim().length === 0) return;
 
                 try {
-                    await deletePost(p.id);
-                    await loadPostsForEnvironment(state.currentEnvId);
+                    await addComment(p.id, {
+                        text: String(text).trim(),
+                        author: authState.username || "unknown",
+                    });
+
+                    formEl.reset();
+
+                    // refresh comments (simple + stable)
+                    const comments = await loadComments(p.id);
+                    renderComments(listEl, comments);
+                    loadedOnce = true;
                 } catch (err) {
                     console.error(err);
-                    alert("Could not delete post.");
+                    alert("Could not add comment.");
                 }
             });
 
@@ -334,8 +553,67 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function renderComments(listEl, comments) {
+        listEl.innerHTML = "";
+
+        if (!comments || comments.length === 0) {
+            listEl.innerHTML = `<div class="empty-state">No comments yet.</div>`;
+            return;
+        }
+
+        comments.forEach((c) => {
+            const item = document.createElement("div");
+            item.className = "comment-item";
+
+            const created = c.createdAt ? new Date(c.createdAt).toLocaleString() : "";
+            const author = c.author || "unknown";
+
+            const delBtnHtml = isAdmin()
+                ? `<div class="comment-actions">
+                        <button class="btn btn-ghost comment-delete" title="Delete comment">Delete</button>
+                   </div>`
+                : "";
+
+            item.innerHTML = `
+                <div class="comment-meta">
+                    <span>${author}</span>
+                    <span>${created}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+                ${delBtnHtml}
+            `;
+
+            if (isAdmin()) {
+                const del = item.querySelector(".comment-delete");
+                del.addEventListener("click", async () => {
+                    if (!confirm("Delete this comment?")) return;
+                    try {
+                        await deleteComment(c.id);
+                        // remove from UI
+                        item.remove();
+                        if (listEl.children.length === 0) {
+                            listEl.innerHTML = `<div class="empty-state">No comments yet.</div>`;
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        alert("Could not delete comment.");
+                    }
+                });
+            }
+
+            listEl.appendChild(item);
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text == null ? "" : String(text);
+        return div.innerHTML;
+    }
+
     /* ---------- UI events ---------- */
 
+    // ADMIN: toggle post form
     togglePostFormBtn.addEventListener("click", () => {
         if (!state.currentEnvId) return;
         postFormCard.classList.toggle("hidden");
@@ -346,16 +624,18 @@ document.addEventListener("DOMContentLoaded", () => {
         postFormCard.classList.add("hidden");
     });
 
+    // ADMIN: create post (with createdBy)
     postForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         if (!state.currentEnvId) return;
 
-        const formData = new FormData(postForm);
+        const fd = new FormData(postForm);
         const payload = {
-            title: formData.get("title"),
-            description: formData.get("description"),
-            type: formData.get("type"),
+            title: fd.get("title"),
+            description: fd.get("description"),
+            type: fd.get("type"),
             environmentId: state.currentEnvId,
+            createdBy: authState.username, // Responsible
         };
 
         try {
@@ -369,7 +649,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // ADMIN: toggle env form
     addEnvBtn.addEventListener("click", () => {
+        if (!isAdmin()) return;
         envFormCard.classList.toggle("hidden");
     });
 
@@ -378,13 +660,16 @@ document.addEventListener("DOMContentLoaded", () => {
         envFormCard.classList.add("hidden");
     });
 
+    // ADMIN: create environment
     envCreateForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const formData = new FormData(envCreateForm);
+        if (!isAdmin()) return;
+
+        const fd = new FormData(envCreateForm);
         const payload = {
-            name: formData.get("name"),
-            status: formData.get("status"),
-            solutionName: formData.get("solutionName") || null,
+            name: fd.get("name"),
+            status: fd.get("status"),
+            solutionName: fd.get("solutionName") || null,
         };
 
         try {
@@ -402,19 +687,17 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Klik på status-pill i header -> skift status
+    // ADMIN: cycle env status
     currentEnvStatusEl.addEventListener("click", async () => {
+        if (!isAdmin()) return;
         if (!state.currentEnvId) return;
 
-        const env = state.environments.find(
-            (e) => e.id === state.currentEnvId
-        );
+        const env = state.environments.find((e) => e.id === state.currentEnvId);
         if (!env) return;
 
         const current = (env.status || "OK").toUpperCase();
         const idx = ENV_STATUSES.indexOf(current);
-        const nextStatus =
-            ENV_STATUSES[(idx + 1 + ENV_STATUSES.length) % ENV_STATUSES.length];
+        const nextStatus = ENV_STATUSES[(idx + 1 + ENV_STATUSES.length) % ENV_STATUSES.length];
 
         try {
             const updated = await updateEnvironment(env.id, {
@@ -423,7 +706,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 solutionName: env.solutionName,
             });
 
-            // opdatér lokal state
             env.status = updated.status;
             updateCurrentEnvironmentHeader(env);
             renderEnvironments();
@@ -433,7 +715,136 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    /* ---------- initial load ---------- */
+    /* ---------- login events ---------- */
 
-    loadEnvironments();
+    loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        loginErrorEl.classList.add("hidden");
+
+        const fd = new FormData(loginForm);
+        const username = fd.get("username");
+        const password = fd.get("password");
+
+        try {
+            const data = await apiLogin(username, password);
+
+            authState.isLoggedIn = true;
+            authState.username = data.username;
+            authState.role = data.role;
+            authState.token = data.token;
+
+            userBadgeEl.textContent = data.username;
+            userBadgeEl.classList.remove("hidden");
+
+            roleBadgeEl.textContent = data.role;
+            roleBadgeEl.classList.remove("hidden");
+
+            logoutBtn.classList.remove("hidden");
+
+            applyRoleVisibility();
+
+            loginScreen.classList.add("hidden");
+            appScreen.classList.remove("hidden");
+
+            await loadEnvironments();
+        } catch (err) {
+            console.error(err);
+            loginErrorEl.classList.remove("hidden");
+        }
+    });
+
+    logoutBtn.addEventListener("click", () => {
+        authState.isLoggedIn = false;
+        authState.username = null;
+        authState.role = null;
+        authState.token = null;
+
+        userBadgeEl.classList.add("hidden");
+        roleBadgeEl.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+
+        state.currentEnvId = null;
+        state.environments = [];
+        envListEl.innerHTML = "";
+        updateCurrentEnvironmentHeader(null);
+        renderPosts([]);
+
+        appScreen.classList.add("hidden");
+        loginScreen.classList.remove("hidden");
+    });
+
+    /* ---------- register UI ---------- */
+
+    showRegisterBtn.addEventListener("click", () => {
+        const isHidden = registerCard.classList.contains("hidden");
+        if (isHidden) {
+            registerCard.classList.remove("hidden");
+            changePwCard.classList.add("hidden");
+        } else {
+            registerCard.classList.add("hidden");
+        }
+        registerErrorEl.classList.add("hidden");
+        registerSuccessEl.classList.add("hidden");
+    });
+
+    registerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        registerErrorEl.classList.add("hidden");
+        registerSuccessEl.classList.add("hidden");
+
+        const fd = new FormData(registerForm);
+        const username = fd.get("username");
+        const password = fd.get("password");
+        const role = fd.get("role");
+
+        try {
+            await apiRegisterUser(username, password, role);
+            registerSuccessEl.textContent = "User created successfully.";
+            registerSuccessEl.classList.remove("hidden");
+            registerForm.reset();
+        } catch (err) {
+            console.error(err);
+            registerErrorEl.textContent = err.message || "Could not create user.";
+            registerErrorEl.classList.remove("hidden");
+        }
+    });
+
+    /* ---------- change password UI ---------- */
+
+    showChangePwBtn.addEventListener("click", () => {
+        const isHidden = changePwCard.classList.contains("hidden");
+        if (isHidden) {
+            changePwCard.classList.remove("hidden");
+            registerCard.classList.add("hidden");
+        } else {
+            changePwCard.classList.add("hidden");
+        }
+        changePwErrorEl.classList.add("hidden");
+        changePwSuccessEl.classList.add("hidden");
+    });
+
+    changePwForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        changePwErrorEl.classList.add("hidden");
+        changePwSuccessEl.classList.add("hidden");
+
+        const fd = new FormData(changePwForm);
+        const username = fd.get("username");
+        const oldPassword = fd.get("oldPassword");
+        const newPassword = fd.get("newPassword");
+
+        try {
+            await apiChangePassword(username, oldPassword, newPassword);
+            changePwSuccessEl.textContent = "Password updated successfully.";
+            changePwSuccessEl.classList.remove("hidden");
+            changePwForm.reset();
+        } catch (err) {
+            console.error(err);
+            changePwErrorEl.textContent = err.message || "Could not change password.";
+            changePwErrorEl.classList.remove("hidden");
+        }
+    });
+
+    // default: show login only
+    applyRoleVisibility();
 });
